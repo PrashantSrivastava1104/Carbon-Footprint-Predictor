@@ -1,14 +1,25 @@
 # Carbon Footprint Predictor
 
+**Live demo:** https://carbon-footprint-predictor-0s3l.onrender.com/
+_(Free hosting: the first load after inactivity can take up to a minute.)_
+
 A Flask web application where users enter monthly lifestyle details and
 receive an estimated carbon footprint (kg CO₂e per month), a Low / Medium /
 High label, the biggest contributing factor, and one actionable tip.
 
 > **Dataset Notice:** The underlying dataset (`Individual Carbon Footprint
-> Calculation` by Mesut Duman, Kaggle, CC0 Public Domain) is **synthetically
+Calculation` by Mesut Duman, Kaggle, CC0 Public Domain) is **synthetically
 > generated from a formula**. The high R² values (see Limitations) are
 > expected and do not reflect a model that would work on real-world survey
 > data without retraining.
+
+<!--
+SCREENSHOTS: after you capture them, save the images in static/screenshots/
+and uncomment this block.
+
+![Input form](static/screenshots/form.png)
+![Result page](static/screenshots/result.png)
+-->
 
 ---
 
@@ -24,8 +35,8 @@ High label, the biggest contributing factor, and one actionable tip.
 8. [How to Retrain](#8-how-to-retrain)
 9. [Limitations](#9-limitations)
 10. [Future Improvements](#10-future-improvements)
-11. [Resume Numbers](#11-resume-numbers)
-12. [Deployment on Render](#12-deployment-on-render)
+11. [Deployment on Render](#11-deployment-on-render)
+12. [Author](#12-author)
 
 ---
 
@@ -40,14 +51,14 @@ etc.) and returns a prediction, a category label, and a personalised tip.
 
 ## 2. Dataset Source & License
 
-| Property | Value |
-|---|---|
-| **Name** | Individual Carbon Footprint Calculation |
-| **Author** | Mesut Duman |
-| **Source** | [Kaggle](https://www.kaggle.com/datasets/dumanmesut/individual-carbon-footprint-calculation) |
-| **License** | CC0 1.0 Public Domain |
-| **Rows / Columns** | 10,000 × 20 |
-| **Nature** | **Synthetic** — generated from a deterministic formula, not from real surveys |
+| Property           | Value                                                                                        |
+| ------------------ | -------------------------------------------------------------------------------------------- |
+| **Name**           | Individual Carbon Footprint Calculation                                                      |
+| **Author**         | Mesut Duman                                                                                  |
+| **Source**         | [Kaggle](https://www.kaggle.com/datasets/dumanmesut/individual-carbon-footprint-calculation) |
+| **License**        | CC0 1.0 Public Domain                                                                        |
+| **Rows / Columns** | 10,000 × 20                                                                                  |
+| **Nature**         | **Synthetic** — generated from a deterministic formula, not from real surveys                |
 
 Download `Carbon Emission.csv` and place it in `data/raw/`.
 
@@ -57,15 +68,15 @@ Download `Carbon Emission.csv` and place it in `data/raw/`.
 
 Each decision is documented in `src/preprocess.py`.
 
-| Step | Action | Rationale |
-|---|---|---|
-| 1 | Rename columns to snake_case | Consistent naming for the pipeline |
-| 2 | Divide `CarbonEmission` by 12 → `monthly_carbon_kg` | Raw column is yearly kg CO₂e; app collects monthly inputs |
-| 3 | Check duplicates | 0 duplicates found — no rows dropped |
-| 4 | `Vehicle Type` NaN (6,721 rows) → `"none"` | These are walk/public-transit users; imputing is semantically correct vs dropping 67% of data |
-| 5 | `Recycling` / `Cooking_With` list-strings → integer counts | e.g. `"['Paper', 'Metal']"` → 2; preserves signal without encoding explosion |
-| 6 | Lowercase & strip all categorical columns | Removes whitespace variation |
-| 7 | Cap numeric outliers (IQR × 3 Tukey fences) | Soft cap: only 52 extreme outliers capped in `vehicle_monthly_distance_km` |
+| Step | Action                                                     | Rationale                                                                                     |
+| ---- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 1    | Rename columns to snake_case                               | Consistent naming for the pipeline                                                            |
+| 2    | Divide `CarbonEmission` by 12 → `monthly_carbon_kg`        | Raw column is yearly kg CO₂e; app collects monthly inputs                                     |
+| 3    | Check duplicates                                           | 0 duplicates found — no rows dropped                                                          |
+| 4    | `Vehicle Type` NaN (6,721 rows) → `"none"`                 | These are walk/public-transit users; imputing is semantically correct vs dropping 67% of data |
+| 5    | `Recycling` / `Cooking_With` list-strings → integer counts | e.g. `"['Paper', 'Metal']"` → 2; preserves signal without encoding explosion                  |
+| 6    | Lowercase & strip all categorical columns                  | Removes whitespace variation                                                                  |
+| 7    | Cap numeric outliers (IQR × 3 Tukey fences)                | Soft cap: only 52 extreme outliers capped in `vehicle_monthly_distance_km`                    |
 
 **Post-cleaning shape:** 10,000 rows × 20 columns (19 features + 1 target)
 
@@ -77,26 +88,29 @@ Each decision is documented in `src/preprocess.py`.
 > Nothing is estimated or hardcoded.
 
 **Train / Test split:** 80% / 20% (8,000 / 2,000 rows), `random_state=42`.
-Scaling and encoding are fitted **on training data only** using
-`sklearn.Pipeline` + `ColumnTransformer` — zero data leakage.
+Scaling and encoding are fitted on training data only using
+`sklearn.Pipeline` + `ColumnTransformer`, which prevents preprocessing leakage.
 
 **Label thresholds** (derived from training-set quantiles only):
+
 - Low ≤ 141.00 kg CO₂e / month (33rd percentile)
 - Medium: 141.00 – 209.25 kg CO₂e / month
 - High ≥ 209.25 kg CO₂e / month (67th percentile)
 
-| Model | Train R² | Test R² | CV R² (mean ± std) | Test MAE | Test RMSE | Overfit? |
-|---|---|---|---|---|---|---|
-| Linear Regression | 0.9324 | 0.9333 | 0.9313 ± 0.0033 | 14.86 | 21.94 | No |
-| Random Forest | 0.9895 | 0.9267 | 0.9182 ± 0.0034 | 17.45 | 23.00 | **YES** |
-| **XGBoost** | **0.9990** | **0.9721** | **0.9686 ± 0.0013** | **10.53** | **14.20** | **No** |
+| Model             | Train R²   | Test R²    | CV R² (mean ± std)  | Test MAE  | Test RMSE | Overfit? |
+| ----------------- | ---------- | ---------- | ------------------- | --------- | --------- | -------- |
+| Linear Regression | 0.9324     | 0.9333     | 0.9313 ± 0.0033     | 14.86     | 21.94     | No       |
+| Random Forest     | 0.9895     | 0.9267     | 0.9182 ± 0.0034     | 17.45     | 23.00     | **YES**  |
+| **XGBoost**       | **0.9990** | **0.9721** | **0.9686 ± 0.0013** | **10.53** | **14.20** | **No**   |
 
 **Winner: XGBoost** — highest Test R² (0.9721), highest CV R² (0.9686),
-lowest MAE (10.53 kg/month) and RMSE (14.20 kg/month), and no overfitting flag
-(train–test gap < 0.05 threshold).
+and lowest MAE (10.53 kg/month) and RMSE (14.20 kg/month).
 
-Random Forest was eliminated due to clear overfitting (train R² 0.99 vs test
-R² 0.93). Linear Regression generalises well but has higher errors.
+Random Forest was eliminated because its test R² (0.9267) was lower than even
+Linear Regression's (0.9333), and it showed a large train-test gap (0.9895 vs
+0.9267). XGBoost also has a train-test gap (0.9990 vs 0.9721), but it stayed
+below the 0.05 cutoff used here, which is a rule of thumb and not a
+statistical test.
 
 ---
 
@@ -150,7 +164,7 @@ Carbon Footprint Predictor/
 │   └── about.html
 │
 └── tests/
-    └── test_predictor.py   # 12 pytest tests
+    └── test_predictor.py   # pytest tests
 ```
 
 ---
@@ -190,13 +204,15 @@ python src/train.py
 ```
 
 This will:
+
 - Reload and reclean the raw CSV
 - Retrain all 3 models on an 80/20 split
 - Print real metrics to the console
 - Overwrite `models/best_pipeline.joblib`, `models/label_thresholds.json`,
   `models/metrics/model_comparison.csv`, `models/metrics/model_comparison.md`,
   and `static/charts/feature_importance.png`
-- Restart Flask to pick up the new model (no code changes needed)
+
+Restart the Flask app afterward so it loads the new model.
 
 ---
 
@@ -207,7 +223,7 @@ This will:
 1. **Synthetic dataset.** The data is formula-generated, not from real
    surveys. The near-perfect R² values (XGBoost: 0.9721 test) are expected
    because the model re-learns the underlying formula. On real survey data
-   with messy human responses, R² would be much lower (likely 0.5–0.8).
+   with messy human responses, R² would likely be lower, but this has not been measured.
 
 2. **Formula-derived target.** Because the target is computed from inputs
    via a fixed formula, the model's predictions are essentially a smooth
@@ -221,12 +237,12 @@ This will:
    `Cooking_With` are encoded as the number of items selected, not which
    items. This loses some signal (e.g., recycling paper vs. metal may differ).
 
-5. **Static tips.** Tips are rule-based, not personalised. A proper system
-   would rank tips by the user's specific predicted emissions per factor.
+5. **Rule-based tips.** The biggest contributing factor is calculated per prediction from XGBoost's feature contributions, but the tips themselves are fixed text for each factor, not generated from the user's exact values.
 
-6. **No unit conversion for different countries.** Grocery bills are in USD;
-   vehicle distance is in km. Users in countries with different currencies or
-   measurement conventions must convert manually.
+6. **Approximate currency conversion.** Users enter the grocery bill in INR.
+   The app converts it to USD at a fixed rate (₹83 = $1) before prediction,
+   because the training data's grocery column is in USD. The dataset was not
+   built from Indian price data, so this input is only a rough guide.
 
 ---
 
@@ -242,28 +258,28 @@ This will:
 
 ---
 
-## 11. Resume Numbers
-
-> Copy these exactly — they come from the real training run.
-
-- Built end-to-end ML pipeline (EDA → preprocessing → training → deployment)
-  with **XGBoost** achieving **Test R² = 0.9721**, **MAE = 10.53 kg CO₂e/month**
-- Compared 3 models (Linear Regression, Random Forest, XGBoost) on 10,000-row dataset;
-  selected best by test R² + 5-fold CV R² (0.9686 ± 0.0013)
-- Eliminated Random Forest due to measurable overfitting (Train R² 0.99 vs Test R² 0.93)
-- Zero data leakage: sklearn Pipeline + ColumnTransformer fit on training data only
-- Flask app with server-side input validation (12 pytest tests, 13/13 smoke tests pass)
-
----
-
-## 12. Deployment on Render
+## 11. Deployment on Render
 
 See `render.yaml` for the full config.
 
 **Quick steps:**
-1. Push project to a GitHub repository (exclude `data/raw/` and `models/*.joblib` via `.gitignore`)
-2. Create a free Render web service pointing to your repo
-3. Set the start command: `gunicorn app:app`
-4. Set environment variable: `SECRET_KEY=<your-secret>`
-5. Add a build step in `render.yaml` or the Render dashboard: `pip install -r requirements.txt && python src/train.py`
-   (or commit the pre-trained `.joblib` file to the repo if the dataset is small enough)
+
+1. Commit the trained model files so the server does not need the dataset:
+   `models/best_pipeline.joblib`, `models/label_thresholds.json`,
+   `models/metrics/`, and `static/charts/feature_importance.png`.
+   Keep `data/raw/` out of git via `.gitignore` (or commit the CSV, since the
+   license allows it).
+2. Make sure `requirements.txt` includes `gunicorn`, and pin the library
+   versions (scikit-learn, xgboost, joblib) to the ones used for training,
+   because a saved model must load with the same versions.
+3. Push the project to a GitHub repository.
+4. Create a free Render web service pointing to the repo.
+5. Set the build command: `pip install -r requirements.txt`
+6. Set the start command: `gunicorn app:app`
+7. Set the environment variable: `SECRET_KEY=<your-secret>`
+
+---
+
+## 12. Author
+
+Prashant Srivastava — [GitHub](https://github.com/PrashantSrivastava1104)
