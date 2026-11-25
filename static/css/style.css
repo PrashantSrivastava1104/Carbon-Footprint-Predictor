@@ -526,9 +526,9 @@ p { max-width: 62ch; }
 
 /* Comparison bar */
 .compare-block {
-  margin-bottom: 3rem;
-  padding-bottom: 3rem;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .compare-block h2 {

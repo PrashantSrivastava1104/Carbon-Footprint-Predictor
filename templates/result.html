@@ -64,7 +64,7 @@
         </span>
         <span class="legend-item">
           <span class="legend-dot" style="background:#D4B896"></span>
-          Medium
+          Medium &mdash; {{ thresholds.low_max | int }}&ndash;{{ thresholds.high_min | int }} kg
         </span>
         <span class="legend-item">
           <span class="legend-dot" style="background:#C98870"></span>
@@ -83,11 +83,11 @@
   <div class="result-details">
 
     <div class="detail-block">
-      <h2>Biggest contributing factor</h2>
+      <h2>Most influential factor in the model</h2>
       <p class="factor-name">{{ top_factor }}</p>
       <p style="font-size:0.85rem;color:var(--muted);max-width:none;">
-        This feature has the highest importance weight in the XGBoost model for the average prediction.
-        Your actual biggest driver may differ.
+        This is the feature the XGBoost model weighs most across all predictions.
+        It is not calculated from your own answers.
       </p>
     </div>
 
