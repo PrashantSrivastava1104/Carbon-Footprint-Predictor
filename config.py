@@ -36,7 +36,7 @@ PROCESSED_PATH = os.path.join(
 # Flask settings
 # ---------------------------------------------------------------------------
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-prod")
-DEBUG = os.environ.get("FLASK_DEBUG", "1") == "1"
+DEBUG = os.environ.get("FLASK_DEBUG", "0") == "1"
 PORT = int(os.environ.get("PORT", 5000))
 
 # ---------------------------------------------------------------------------

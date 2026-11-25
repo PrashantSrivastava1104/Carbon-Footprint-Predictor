@@ -83,11 +83,11 @@
   <div class="result-details">
 
     <div class="detail-block">
-      <h2>Most influential factor in the model</h2>
+      <h2>Biggest contributor to your estimate</h2>
       <p class="factor-name">{{ top_factor }}</p>
       <p style="font-size:0.85rem;color:var(--muted);max-width:none;">
-        This is the feature the XGBoost model weighs most across all predictions.
-        It is not calculated from your own answers.
+        {% if factor_kg %}Adds about {{ factor_kg }} kg CO&#8322;e per month compared with the model's average prediction. {% endif %}
+        Calculated from your own answers. The data is synthetic, so treat it as illustrative.
       </p>
     </div>
 

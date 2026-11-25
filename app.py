@@ -17,6 +17,7 @@ import sys
 import json
 import joblib
 import pandas as pd
+import xgboost as xgb
 from flask import Flask, render_template, request, jsonify
 
 from config import (
@@ -34,6 +35,8 @@ app.secret_key = SECRET_KEY
 # ============================================================
 # Load model and thresholds ONCE at startup
 # ============================================================
+
+
 def load_model_artifacts():
     """
     Load the trained pipeline and label thresholds from disk.
@@ -50,7 +53,7 @@ def load_model_artifacts():
             f"Thresholds not found at {THRESHOLDS_PATH}. "
             "Run 'python src/train.py' first."
         )
-    pipeline   = joblib.load(MODEL_PATH)
+    pipeline = joblib.load(MODEL_PATH)
     with open(THRESHOLDS_PATH) as f:
         thresholds = json.load(f)
     return pipeline, thresholds
@@ -120,8 +123,8 @@ def validate_inputs(form: dict) -> tuple:
         "vehicle_monthly_distance_km": "Monthly Vehicle Distance (km)",
         "waste_bag_weekly_count":      "Waste Bags per Week",
         "how_long_tv_pc_daily_hour":   "Daily TV/PC Hours",
-        "how_many_new_clothes_monthly":"New Clothes per Month",
-        "how_long_internet_daily_hour":"Daily Internet Hours",
+        "how_many_new_clothes_monthly": "New Clothes per Month",
+        "how_long_internet_daily_hour": "Daily Internet Hours",
     }
     for field, label in numeric_fields.items():
         raw = form.get(field, "").strip()
@@ -139,7 +142,7 @@ def validate_inputs(form: dict) -> tuple:
             continue
         # Store as int for count fields, float for others
         cleaned[field] = int(val) if field in ["waste_bag_weekly_count",
-                                                "how_many_new_clothes_monthly"] else val
+                                               "how_many_new_clothes_monthly"] else val
 
     return (None, errors) if errors else (cleaned, [])
 
@@ -157,54 +160,113 @@ def label_footprint(value: float) -> str:
     return "Medium"
 
 
-def get_top_factor_and_tip(input_data: dict, pipeline) -> tuple:
+FACTOR_LABELS = {
+    "diet": "Diet",
+    "how_often_shower": "Shower frequency",
+    "heating_energy_source": "Heating / cooking energy source",
+    "transport": "Main transport mode",
+    "vehicle_type": "Vehicle fuel type",
+    "social_activity": "Social activity",
+    "air_travel_frequency": "Air travel",
+    "waste_bag_size": "Waste bag size",
+    "energy_efficiency": "Appliance efficiency",
+    "recycling_count": "Recycling",
+    "cooking_devices_count": "Cooking methods",
+    "monthly_grocery_bill": "Grocery spending",
+    "vehicle_monthly_distance_km": "Monthly vehicle distance",
+    "waste_bag_weekly_count": "Waste bags per week",
+    "how_long_tv_pc_daily_hour": "Screen time",
+    "how_many_new_clothes_monthly": "New clothes bought",
+    "how_long_internet_daily_hour": "Internet / streaming time",
+}
+
+# Dataset columns whose names differ from the keys in config.TIPS
+TIP_KEY_OVERRIDES = {
+    "recycling_count": "recycling",
+    "cooking_devices_count": "cooking_with",
+}
+
+# Things the user can't reasonably change, so we never pick them as the factor
+NOT_ACTIONABLE = {"sex", "body_type"}
+
+# Answers that mean the user is already doing well, so no tip is needed there
+ALREADY_LOW_VALUES = {
+    "diet": {"vegan", "vegetarian"},
+    "transport": {"public", "walk/bicycle"},
+    "vehicle_type": {"none", "electric"},
+    "air_travel_frequency": {"never"},
+    "energy_efficiency": {"yes"},
+}
+
+
+def _already_low(col: str, cleaned: dict) -> bool:
+    value = cleaned.get(col)
+    if col in ALREADY_LOW_VALUES:
+        return value in ALREADY_LOW_VALUES[col]
+    if col == "vehicle_monthly_distance_km":
+        return value == 0
+    if col == "recycling_count":
+        return value is not None and value >= 3
+    return False
+
+
+def _base_column(feature_name: str, num_cols: list, cat_cols: list) -> str:
+    """Map a transformed feature name (e.g. 'diet_vegan') back to its original column."""
+    if feature_name in num_cols:
+        return feature_name
+    for col in sorted(cat_cols, key=len, reverse=True):
+        if feature_name.startswith(col + "_"):
+            return col
+    return feature_name
+
+
+def get_top_factor_and_tip(cleaned: dict, input_df: pd.DataFrame, pipeline) -> tuple:
     """
-    Identify the feature with the highest importance for this model,
-    then return a human-readable factor name and an actionable tip.
+    Find the factor that adds the most CO2e to THIS user's prediction.
 
-    Strategy:
-    - For tree-based models (RF, XGBoost): use feature_importances_ from the model.
-    - Map the most important feature name back to a readable label.
-    - Look up the tip from TIPS dict.
+    Uses XGBoost's per-prediction contributions (pred_contribs), which are in
+    kg CO2e/month and sum to the prediction. One-hot columns are added back
+    together per original column. Returns (readable_name, tip, kg_added).
     """
-    model = pipeline.named_steps["model"]
-    preprocessor = pipeline.named_steps["preprocessor"]
+    try:
+        model = pipeline.named_steps["model"]
+        preprocessor = pipeline.named_steps["preprocessor"]
 
-    # Get feature names after preprocessing
-    cat_cols = preprocessor.transformers_[1][2]   # categorical columns list
-    num_cols = preprocessor.transformers_[0][2]   # numeric columns list
+        num_cols = list(preprocessor.transformers_[0][2])
+        cat_cols = list(preprocessor.transformers_[1][2])
+        ohe = preprocessor.named_transformers_["cat"]
+        all_names = num_cols + ohe.get_feature_names_out(cat_cols).tolist()
 
-    ohe = preprocessor.named_transformers_["cat"]
-    ohe_names = ohe.get_feature_names_out(cat_cols).tolist()
-    all_feature_names = num_cols + ohe_names
+        booster = model.get_booster()
+        X = preprocessor.transform(input_df)
+        dmat = xgb.DMatrix(X, feature_names=booster.feature_names)
+        contribs = booster.predict(dmat, pred_contribs=True)[
+            0][:-1]  # drop bias term
 
-    if hasattr(model, "feature_importances_"):
-        importances = model.feature_importances_
-    elif hasattr(model, "coef_"):
-        importances = abs(model.coef_)
-    else:
-        return "your lifestyle choices", DEFAULT_TIP
+        if len(all_names) != len(contribs):
+            raise ValueError("Feature names and contributions do not line up.")
 
-    # Find most important feature
-    best_idx = importances.argmax()
-    best_feature = all_feature_names[best_idx]
+        totals = {}
+        for name, value in zip(all_names, contribs):
+            col = _base_column(name, num_cols, cat_cols)
+            totals[col] = totals.get(col, 0.0) + float(value)
 
-    # Strip OHE suffix to get base column name (e.g., "diet_vegan" → "diet")
-    base_col = best_feature.split("_")[0] if "_" in best_feature else best_feature
-    # Try exact match first, then prefix match
-    tip_key = best_feature if best_feature in TIPS else base_col
-    # Try matching any key that starts with base_col
-    if tip_key not in TIPS:
-        for k in TIPS:
-            if best_feature.startswith(k):
-                tip_key = k
-                break
+        candidates = {
+            col: v for col, v in totals.items()
+            if v > 0 and col not in NOT_ACTIONABLE and not _already_low(col, cleaned)
+        }
+        if not candidates:
+            return "Your overall lifestyle", DEFAULT_TIP, None
 
-    # Human-readable factor name
-    readable = best_feature.replace("_", " ").title()
-    tip = TIPS.get(tip_key, DEFAULT_TIP)
+        top_col = max(candidates, key=candidates.get)
+        label = FACTOR_LABELS.get(
+            top_col, top_col.replace("_", " ").capitalize())
+        tip = TIPS.get(TIP_KEY_OVERRIDES.get(top_col, top_col), DEFAULT_TIP)
+        return label, tip, round(candidates[top_col], 1)
 
-    return readable, tip
+    except Exception as e:
+        print(f"[WARN] Per-user factor failed, using default tip: {e}")
+        return "Your overall lifestyle", DEFAULT_TIP, None
 
 
 def build_input_df(cleaned: dict) -> pd.DataFrame:
@@ -259,12 +321,15 @@ def predict():
     # India localisation: grocery bill was entered in INR — convert to USD
     # before passing to the model (which was trained on USD values).
     input_df = build_input_df(cleaned)
-    input_df["monthly_grocery_bill"] = input_df["monthly_grocery_bill"] / INR_TO_USD_RATE
+    input_df["monthly_grocery_bill"] = input_df["monthly_grocery_bill"] / \
+        INR_TO_USD_RATE
     prediction = float(PIPELINE.predict(input_df)[0])
-    prediction = max(0.0, prediction)   # Clamp to non-negative (CO2 can't be negative)
+    # Clamp to non-negative (CO2 can't be negative)
+    prediction = max(0.0, prediction)
 
     label = label_footprint(prediction)
-    top_factor, tip = get_top_factor_and_tip(cleaned, PIPELINE)
+    top_factor, tip, factor_kg = get_top_factor_and_tip(
+        cleaned, input_df, PIPELINE)
 
     return render_template(
         "result.html",
@@ -272,6 +337,7 @@ def predict():
         label=label,
         top_factor=top_factor,
         tip=tip,
+        factor_kg=factor_kg,
         thresholds=THRESHOLDS,
         input_data=cleaned,
     )
@@ -296,7 +362,8 @@ def about():
             metrics_table = list(reader)
 
     chart_exists = os.path.exists(
-        os.path.join(os.path.dirname(__file__), "static", "charts", "feature_importance.png")
+        os.path.join(os.path.dirname(__file__), "static",
+                     "charts", "feature_importance.png")
     )
 
     return render_template(
