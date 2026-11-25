@@ -1,0 +1,4 @@
+model,train_r2,test_r2,cv_r2_mean,cv_r2_std,test_mae,test_rmse,overfit_flag
+Linear Regression,0.9324,0.9333,0.9313,0.0033,14.8601,21.9441,No
+Random Forest,0.9895,0.9267,0.9182,0.0034,17.447,23.0026,YES
+XGBoost,0.999,0.9721,0.9686,0.0013,10.529,14.2024,No

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Your result — CarbonPredict{% endblock %}
+{% block meta_description %}Your estimated monthly carbon footprint.{% endblock %}
+
+{% block content %}
+<div class="container">
+<div class="result-wrap">
+
+  <a href="/" class="result-back" aria-label="Back to form">
+    &larr; Back
+  </a>
+
+  <!-- ===== Score block ===== -->
+  <div class="result-score-block">
+    <div class="result-score-row">
+      <div class="result-number" aria-label="{{ prediction }} kilograms CO2 equivalent per month">
+        <span class="result-value">{{ prediction }}</span>
+        <span class="result-unit">kg CO&#8322;e / month</span>
+      </div>
+      <span class="result-tag tag-{{ label | lower }}" role="status" aria-label="Footprint level: {{ label }}">
+        {{ label }}
+      </span>
+    </div>
+
+    <!-- ===== Comparison bar ===== -->
+    {# Bar max = 450 kg. Positions are percentages. #}
+    {% set bar_max = 450 %}
+    {% set low_w   = (thresholds.low_max  / bar_max * 100) | round(1) %}
+    {% set mid_w   = ((thresholds.high_min - thresholds.low_max) / bar_max * 100) | round(1) %}
+    {% set high_w  = (100 - low_w - mid_w) | round(1) %}
+    {% set user_pct = [(prediction / bar_max * 100), 100] | min | round(1) %}
+    {# Dataset mean = 189.1 kg/month from training run #}
+    {% set avg_pct  = (189.1 / bar_max * 100) | round(1) %}
+
+    <div class="compare-block">
+      <h2>Where you sit</h2>
+
+      <div class="bar-container" role="img" aria-label="Comparison bar: Low up to {{ thresholds.low_max }} kg, Medium up to {{ thresholds.high_min }} kg, High above that. Your value: {{ prediction }} kg. Dataset average: 189 kg.">
+        <div class="bar-track">
+          <div class="bar-low"    style="width:{{ low_w }}%"></div>
+          <div class="bar-medium" style="width:{{ mid_w }}%"></div>
+          <div class="bar-high"   style="width:{{ high_w }}%"></div>
+        </div>
+        <div class="bar-markers">
+          <!-- User marker -->
+          <div class="bar-marker" style="left:{{ user_pct }}%">
+            <div class="marker-line"></div>
+            <div class="marker-label">You &mdash; {{ prediction }} kg</div>
+          </div>
+          <!-- Average marker (only if not too close to user) -->
+          {% if (avg_pct - user_pct) | abs > 5 %}
+          <div class="bar-marker marker-avg" style="left:{{ avg_pct }}%">
+            <div class="marker-line"></div>
+            <div class="marker-label">Avg &mdash; 189 kg</div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="bar-legend">
+        <span class="legend-item">
+          <span class="legend-dot" style="background:#A8C4B0"></span>
+          Low &mdash; &le; {{ thresholds.low_max | int }} kg
+        </span>
+        <span class="legend-item">
+          <span class="legend-dot" style="background:#D4B896"></span>
+          Medium
+        </span>
+        <span class="legend-item">
+          <span class="legend-dot" style="background:#C98870"></span>
+          High &mdash; &ge; {{ thresholds.high_min | int }} kg
+        </span>
+        <span class="legend-item">
+          <span class="legend-dot" style="background:var(--border)"></span>
+          Dataset average: 189 kg
+        </span>
+      </div>
+    </div>
+
+  </div><!-- /result-score-block -->
+
+  <!-- ===== Detail cards ===== -->
+  <div class="result-details">
+
+    <div class="detail-block">
+      <h2>Biggest contributing factor</h2>
+      <p class="factor-name">{{ top_factor }}</p>
+      <p style="font-size:0.85rem;color:var(--muted);max-width:none;">
+        This feature has the highest importance weight in the XGBoost model for the average prediction.
+        Your actual biggest driver may differ.
+      </p>
+    </div>
+
+    <div class="detail-block">
+      <h2>One thing to try</h2>
+      <p class="tip-text">{{ tip }}</p>
+    </div>
+
+  </div><!-- /result-details -->
+
+  <!-- ===== Actions ===== -->
+  <div class="result-actions">
+    <a href="/" class="btn-secondary">&larr; Try different values</a>
+    &emsp;
+    <a href="/about" class="btn-secondary">View model details &rarr;</a>
+  </div>
+
+</div><!-- /result-wrap -->
+</div><!-- /container -->
+{% endblock %}

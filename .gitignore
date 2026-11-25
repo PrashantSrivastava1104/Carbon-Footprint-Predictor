@@ -1,0 +1,55 @@
+# ========================================
+# Carbon Footprint Predictor — .gitignore
+# ========================================
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Jupyter / IPython
+.ipynb_checkpoints/
+*.ipynb
+
+# Data — raw data is NOT committed (download via README instructions)
+data/raw/
+data/processed/
+
+# Model artifacts and metrics ARE committed so the deployed app can load them
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Logs
+*.log

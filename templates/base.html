@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="{% block meta_description %}Estimate your monthly carbon footprint with machine learning.{% endblock %}" />
+  <title>{% block title %}CarbonPredict{% endblock %}</title>
+
+  <!-- Google Fonts: Fraunces (serif) + DM Sans (body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+
+  <!-- Skip navigation for keyboard users -->
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <!-- ===== Navigation ===== -->
+  <nav class="site-nav" aria-label="Main navigation">
+    <div class="nav-inner">
+      <a href="/" class="nav-brand" aria-label="CarbonPredict home">
+        Carbon<span>Predict</span>
+      </a>
+      <ul class="nav-links" role="list">
+        <li><a href="/" class="{% if request.endpoint == 'index' %}active{% endif %}">Predict</a></li>
+        <li><a href="/about" class="{% if request.endpoint == 'about' %}active{% endif %}">About</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- ===== Main content ===== -->
+  <main id="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- ===== Footer ===== -->
+  <footer class="site-footer" role="contentinfo">
+    <div class="footer-inner">
+      <p class="footer-note">
+        <strong>Synthetic data notice.</strong> This tool uses a synthetically generated dataset
+        (Mesut Duman, Kaggle, CC0). Predictions are illustrative, not a substitute for a
+        professional carbon audit. Grocery bill entered in INR, converted internally to USD
+        at ~&#8377;83 = $1.
+      </p>
+      <nav class="footer-links" aria-label="Footer links">
+        <a href="/about">Model details</a>
+        <a href="https://www.kaggle.com/datasets/dumanmesut/individual-carbon-footprint-calculation" target="_blank" rel="noopener">Dataset source</a>
+      </nav>
+    </div>
+  </footer>
+
+</body>
+</html>

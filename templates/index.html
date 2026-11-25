@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+{% block title %}CarbonPredict — Estimate your monthly footprint{% endblock %}
+{% block meta_description %}Enter a typical month. We'll estimate your CO₂ emissions and show what drives them.{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <!-- ===== Page header ===== -->
+  <header class="page-header">
+    <span class="eyebrow">India Edition &middot; XGBoost Model &middot; Synthetic Data</span>
+    <h1>Your carbon<br>footprint, estimated.</h1>
+    <p class="lead">Enter a typical month. We'll estimate your CO&#8322; emissions and show what drives them.</p>
+  </header>
+
+  <!-- ===== Errors ===== -->
+  {% if errors %}
+  <div class="alert" role="alert" aria-live="assertive">
+    <strong>Please fix these before continuing:</strong>
+    <ul class="error-list">
+      {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if not model_ready %}
+  <div class="alert alert-info" role="alert">
+    <strong>Model not ready.</strong> Run <code>python src/train.py</code> in your terminal, then refresh.
+  </div>
+  {% endif %}
+
+  <!-- ===== Two-column body ===== -->
+  <div class="page-body">
+
+    <!-- ---- Form column ---- -->
+    <div class="form-col">
+      <form id="predict-form" class="form-wrap" method="POST" action="{{ url_for('predict') }}" novalidate>
+
+        <!-- Section 1: Personal -->
+        <section class="form-section" aria-labelledby="sec-personal">
+          <div class="section-heading-row">
+            <span class="label-caps" id="sec-personal">Personal</span>
+            <span class="section-rule" aria-hidden="true"></span>
+          </div>
+          <div class="fields-grid">
+
+            <div class="field">
+              <label class="field-label" for="body_type">Body type</label>
+              <select id="body_type" name="body_type" class="field-select" required>
+                <option value="">Select</option>
+                {% for v in allowed.body_type %}
+                <option value="{{ v }}"
+                  {% if form_data and form_data.get('body_type') == v %}selected{% endif %}>
+                  {{ v.title() }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="sex">Sex</label>
+              <select id="sex" name="sex" class="field-select" required>
+                <option value="">Select</option>
+                {% for v in allowed.sex %}
+                <option value="{{ v }}"
+                  {% if form_data and form_data.get('sex') == v %}selected{% endif %}>
+                  {{ v.title() }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="diet">Diet</label>
+              <select id="diet" name="diet" class="field-select" required>
+                <option value="">Select</option>
+                {% for v in allowed.diet %}
+                <option value="{{ v }}"
+                  {% if form_data and form_data.get('diet') == v %}selected{% endif %}>
+                  {{ v.title() }}
+                </option>
+                {% endfor %}
+              </select>
+              <span class="field-hint">Vegetarian is naturally low-carbon</span>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="social_activity">Social activity</label>
+              <select id="social_activity" name="social_activity" class="field-select" required>
+                <option value="">How often out?</option>
+                {% for v in allowed.social_activity %}
+                <option value="{{ v }}"
+                  {% if form_data and form_data.get('social_activity') == v %}selected{% endif %}>
+                  {{ v.title() }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- Section 2: Home & Energy -->
+        <section class="form-section" aria-labelledby="sec-home">
+          <div class="section-heading-row">
+            <span class="label-caps" id="sec-home">Home &amp; Energy</span>
+            <span class="section-rule" aria-hidden="true"></span>
+          </div>
+          <div class="fields-grid">
+
+            <div class="field">
+              <label class="field-label" for="heating_energy_source">Heating / cooking energy</label>
+              <select id="heating_energy_source" name="heating_energy_source" class="field-select" required>
+                <option value="">Select source</option>
+                {% for v in allowed.heating_energy_source %}
+                <option value="{{ v }}"
+                  {% if form_data and form_data.get('heating_energy_source') == v %}selected{% endif %}>
+                  {{ v.title() }}
+                </option>
+                {% endfor %}
+              </select>
+              <span class="field-hint">Most Indian homes use Electricity or Natural Gas (LPG)</span>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="energy_efficiency">BEE-rated / efficient appliances?</label>
+              <select id="energy_efficiency" name="energy_efficiency" class="field-select" required>
+                <option value="">Select</option>
+                {% for v in allowed.energy_efficiency %}
+                <option value="{{ v }}"
+                  {% if form_data and form_data.get('energy_efficiency') == v %}selected{% endif %}>
+                  {{ v.title() }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="how_long_tv_pc_daily_hour">
+                Screen time (TV / PC)
+                <span class="field-unit">hrs/day</span>
+              </label>
+              <input type="number" id="how_long_tv_pc_daily_hour" name="how_long_tv_pc_daily_hour"
+                     class="field-input" min="0" max="24" step="0.5" placeholder="e.g. 4"
+                     value="{{ form_data.get('how_long_tv_pc_daily_hour', '') if form_data else '' }}"
+                     required />
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="how_long_internet_daily_hour">
+                Internet / streaming
+                <span class="field-unit">hrs/day</span>
+              </label>
+              <input type="number" id="how_long_internet_daily_hour" name="how_long_internet_daily_hour"
+                     class="field-input" min="0" max="24" step="0.5" placeholder="e.g. 5"
+                     value="{{ form_data.get('how_long_internet_daily_hour', '') if form_data else '' }}"
+                     required />
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="how_often_shower">Shower / bath frequency</label>
+              <select id="how_often_shower" name="how_often_shower" class="field-select" required>
+                <option value="">How often?</option>
+                {% for v in allowed.how_often_shower %}
+                <option value="{{ v }}"
+                  {% if form_data and form_data.get('how_often_shower') == v %}selected{% endif %}>
+                  {{ v.title() }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="field field-full">
+              <span class="field-label">Cooking methods used</span>
+              <div class="checkbox-group" role="group" aria-label="Select cooking methods">
+                {% for v in ['stove', 'oven', 'microwave', 'grill', 'airfryer'] %}
+                <label class="check-item">
+                  <input type="checkbox" name="cooking_with" value="{{ v }}"
+                         {% if form_data and v in form_data.getlist('cooking_with') %}checked{% endif %} />
+                  <span class="check-box"></span>
+                  {{ v.title() }}
+                </label>
+                {% endfor %}
+              </div>
+              <span class="field-hint">Select all you use. Induction (Stove) is most efficient.</span>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- Section 3: Transport -->
+        <section class="form-section" aria-labelledby="sec-transport">
+          <div class="section-heading-row">
+            <span class="label-caps" id="sec-transport">Travel</span>
+            <span class="section-rule" aria-hidden="true"></span>
+          </div>
+          <div class="fields-grid">
+
+            <div class="field">
+              <label class="field-label" for="transport">Main transport mode</label>
+              <select id="transport" name="transport" class="field-select" required>
+                <option value="">Select</option>
+                {% for v in allowed.transport %}
+                <option value="{{ v }}"
+                  {% if form_data and form_data.get('transport') == v %}selected{% endif %}>
+                  {{ v.title() }}
+                </option>
+                {% endfor %}
+              </select>
+              <span class="field-hint">Metro, bus, auto-rickshaw = Public</span>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="vehicle_type">Vehicle fuel type</label>
+              <select id="vehicle_type" name="vehicle_type" class="field-select" required>
+                <option value="">Select</option>
+                {% for v in allowed.vehicle_type %}
+                <option value="{{ v }}"
+                  {% if form_data and form_data.get('vehicle_type') == v %}selected{% endif %}>
+                  {{ 'LPG (CNG equivalent)' if v == 'lpg' else ('None — no vehicle' if v == 'none' else v.title()) }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="vehicle_monthly_distance_km">
+                Vehicle distance this month
+                <span class="field-unit">km</span>
+              </label>
+              <input type="number" id="vehicle_monthly_distance_km" name="vehicle_monthly_distance_km"
+                     class="field-input" min="0" max="5000" step="1" placeholder="e.g. 500"
+                     value="{{ form_data.get('vehicle_monthly_distance_km', '') if form_data else '' }}"
+                     required />
+              <span class="field-hint">Typical Indian commuter: 300–800 km/month. Enter 0 if no vehicle.</span>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="air_travel_frequency">Flights this year</label>
+              <select id="air_travel_frequency" name="air_travel_frequency" class="field-select" required>
+                <option value="">How often do you fly?</option>
+                {% for v in allowed.air_travel_frequency %}
+                <option value="{{ v }}"
+                  {% if form_data and form_data.get('air_travel_frequency') == v %}selected{% endif %}>
+                  {{ v.title() }}
+                </option>
+                {% endfor %}
+              </select>
+              <span class="field-hint">If you take trains instead of flights, choose Rarely or Never</span>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- Section 4: Food & Shopping -->
+        <section class="form-section" aria-labelledby="sec-food">
+          <div class="section-heading-row">
+            <span class="label-caps" id="sec-food">Food &amp; Shopping</span>
+            <span class="section-rule" aria-hidden="true"></span>
+          </div>
+          <div class="fields-grid">
+
+            <div class="field">
+              <label class="field-label" for="monthly_grocery_bill">
+                Monthly grocery bill
+                <span class="field-unit">&#8377; INR</span>
+              </label>
+              <input type="number" id="monthly_grocery_bill" name="monthly_grocery_bill"
+                     class="field-input" min="0" max="50000" step="100" placeholder="e.g. 5000"
+                     value="{{ form_data.get('monthly_grocery_bill', '') if form_data else '' }}"
+                     required />
+              <span class="field-hint">&#8377;0 – &#8377;50,000 &middot; Avg household: &#8377;3,000–&#8377;8,000</span>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="how_many_new_clothes_monthly">
+                New clothes bought
+                <span class="field-unit">items/month</span>
+              </label>
+              <input type="number" id="how_many_new_clothes_monthly" name="how_many_new_clothes_monthly"
+                     class="field-input" min="0" max="50" step="1" placeholder="e.g. 2"
+                     value="{{ form_data.get('how_many_new_clothes_monthly', '') if form_data else '' }}"
+                     required />
+              <span class="field-hint">Try local handloom or thrift stores</span>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- Section 5: Waste -->
+        <section class="form-section" aria-labelledby="sec-waste">
+          <div class="section-heading-row">
+            <span class="label-caps" id="sec-waste">Waste</span>
+            <span class="section-rule" aria-hidden="true"></span>
+          </div>
+          <div class="fields-grid">
+
+            <div class="field">
+              <label class="field-label" for="waste_bag_size">Bin bag size</label>
+              <select id="waste_bag_size" name="waste_bag_size" class="field-select" required>
+                <option value="">Typical size</option>
+                {% for v in allowed.waste_bag_size %}
+                <option value="{{ v }}"
+                  {% if form_data and form_data.get('waste_bag_size') == v %}selected{% endif %}>
+                  {{ v.title() }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="waste_bag_weekly_count">
+                Bags of waste per week
+                <span class="field-unit">bags</span>
+              </label>
+              <input type="number" id="waste_bag_weekly_count" name="waste_bag_weekly_count"
+                     class="field-input" min="0" max="20" step="1" placeholder="e.g. 2"
+                     value="{{ form_data.get('waste_bag_weekly_count', '') if form_data else '' }}"
+                     required />
+            </div>
+
+            <div class="field field-full">
+              <span class="field-label">What do you recycle / give to the kabadiwala?</span>
+              <div class="checkbox-group" role="group" aria-label="Recycling options">
+                {% for v in ['paper', 'glass', 'metal', 'plastic'] %}
+                <label class="check-item">
+                  <input type="checkbox" name="recycling" value="{{ v }}"
+                         {% if form_data and v in form_data.getlist('recycling') %}checked{% endif %} />
+                  <span class="check-box"></span>
+                  {{ v.title() }}
+                </label>
+                {% endfor %}
+              </div>
+              <span class="field-hint">Select none if you don't separate waste</span>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- Submit -->
+        <div class="form-submit">
+          <button type="submit" id="submit-btn" class="btn-submit"
+                  {% if not model_ready %}disabled{% endif %}>
+            Estimate my footprint &rarr;
+          </button>
+          <p class="submit-note">
+            Grocery bill is converted from &#8377; to USD internally before the model runs.
+            Results are for educational purposes only.
+          </p>
+        </div>
+
+      </form>
+    </div><!-- /form-col -->
+
+    <!-- ---- Sidebar ---- -->
+    <aside class="sidebar" aria-label="About this tool">
+
+      <div class="sidebar-block">
+        <h3>What this does</h3>
+        <p>You enter a month of lifestyle data. An XGBoost model estimates your CO&#8322;e in kilograms, labels it Low / Medium / High, and surfaces your biggest contributing factor.</p>
+      </div>
+
+      <div class="sidebar-block">
+        <h3>Model performance</h3>
+        <div class="stat-row">
+          <div class="stat-item">
+            <span class="stat-value">0.9721</span>
+            <span class="stat-label">Test R&sup2; (XGBoost)</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value">10.5 kg</span>
+            <span class="stat-label">Mean absolute error / month</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value">10,000</span>
+            <span class="stat-label">Training rows</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-block">
+        <h3>Important caveat</h3>
+        <p>The dataset is <strong>synthetically generated</strong>, not from real surveys. The high R&sup2; reflects the model re-learning the formula, not real-world accuracy. See the <a href="/about" style="color:var(--clay);text-decoration:underline">About page</a> for full limitations.</p>
+      </div>
+
+      <div class="sidebar-block">
+        <h3>Thresholds (India-calibrated)</h3>
+        <ul>
+          <li>Low &mdash; under 141 kg CO&#8322;e / month</li>
+          <li>Medium &mdash; 141 to 209 kg</li>
+          <li>High &mdash; above 209 kg</li>
+        </ul>
+      </div>
+
+    </aside>
+
+  </div><!-- /page-body -->
+</div><!-- /container -->
+{% endblock %}
