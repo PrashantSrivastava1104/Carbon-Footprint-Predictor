@@ -22,8 +22,8 @@
       <p>
         We compared three models — Linear Regression, Random Forest, and XGBoost — on an
         80/20 train/test split with a fixed random seed. The scaler and encoder are fitted
-        on training data only, inside an sklearn Pipeline, so there is no data leakage.
-        XGBoost won on every metric.
+        on training data only, inside an sklearn Pipeline, which prevents preprocessing leakage.
+        XGBoost had the best test R², cross-validation R², MAE, and RMSE.
       </p>
     </div>
 
